@@ -159,7 +159,7 @@ def web_search_links(query: str) -> str:
     import urllib.parse
     q = urllib.parse.quote(query)
     return (
-        f"Couldn't find an answer. Try:\n"
+        f"Couldn't find answer. Try:\n"
         f"- Google: https://www.google.com/search?q={q}\n"
         f"- DuckDuckGo: https://duckduckgo.com/?q={q}"
     )
@@ -213,7 +213,7 @@ class YouTubeConversationalQA:
 
     def ask(self, url: str, question: str, session_id: str="default") -> str:
         chain = self.build_chain(url, session_id)
-        answer = None
+        ans = None
         if chain:
             try:
                 if is_summary_question(question):
@@ -221,11 +221,11 @@ class YouTubeConversationalQA:
                     res = chain.invoke({"question": tpl})
                 else:
                     res = chain.invoke({"question": question})
-                answer = res.get("answer", "").strip()
+                ans = res.get("answer", "").strip()
             except Exception as e:
                 logger.warning(f"QA chain failed: {e}")
-        if answer and not self.is_incomplete(answer):
-            return answer
+        if ans and not self.is_incomplete(ans):
+            return ans
         title = get_video_title(url)
         term = title or question
         wiki = wikipedia_search(term)
@@ -265,16 +265,16 @@ def err_any(e):
 @app.route('/', methods=['GET','HEAD'])
 def index():
     return jsonify({
-        "service": "YouTube Q&A API",
-        "version": "1.0.0",
-        "status": "operational",
-        "endpoints": {
-            "health": "/health",
-            "qa": "/api/v1/youtube-qa",
-            "status": "/api/v1/status"
+        "service":"YouTube Q&A API",
+        "version":"1.0.0",
+        "status":"operational",
+        "endpoints":{
+            "health":"/health",
+            "qa":"/api/v1/youtube-qa",
+            "status":"/api/v1/status"
         },
-        "timestamp": time.time()
-    }), 200
+        "timestamp":time.time()
+    }),200
 
 @app.route('/health')
 def health():
@@ -292,18 +292,18 @@ def status():
 @limiter.limit("5 per minute")
 def youtube_qa():
     data = request.get_json() or {}
-    url = data.get("url", "").strip()
-    q = data.get("question", "").strip()
+    url = data.get("url","").strip()
+    q = data.get("question","").strip()
     if not url or not q:
-        return jsonify(error="Missing url or question"), 400
-    if len(q) > 500:
-        return jsonify(error="Question too long (max 500 chars)"), 400
+        return jsonify(error="Missing url or question"),400
+    if len(q)>500:
+        return jsonify(error="Question too long (max 500 chars)"),400
     try:
         vid = extract_video_id(url)
     except ValueError:
-        return jsonify(error="Invalid YouTube URL"), 400
-    ans = qa_service.ask(url, q, data.get("session_id", "default"))
+        return jsonify(error="Invalid YouTube URL"),400
+    ans = qa_service.ask(url,q,data.get("session_id","default"))
     return jsonify(answer=ans, video_id=vid, timestamp=time.time())
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=False)
+if __name__=="__main__":
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT",5000)), debug=False)
