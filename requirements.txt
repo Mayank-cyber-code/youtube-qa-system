@@ -38,7 +38,7 @@ gunicorn==21.2.0
 # gevent==23.9.1  # Remove unless WebSockets needed
 
 # Security
-cryptography==41.0.8
+cryptography==41.0.7
 
 # Logging and Monitoring
 structlog==23.2.0
