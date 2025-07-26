@@ -322,6 +322,9 @@ def youtube_qa():
         return jsonify(error="Invalid YouTube URL"), 400
     ans = qa_service.ask(url, q, data.get("session_id", "default"))
     return jsonify(answer=ans, video_id=vid, timestamp=time.time())
+@app.route('/favicon.ico')
+def favicon():
+    return '', 204
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=False)
