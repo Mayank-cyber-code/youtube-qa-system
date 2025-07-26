@@ -2,13 +2,14 @@
   "manifest_version": 3,
   "name": "YouTube Q&A",
   "version": "1.0.0",
-  "description": "Ask questions YouTube videos using AI-powered Q&A.",
+  "description": "Ask questions about YouTube videos using AI-powered Q&A.",
   "icons": {
     "128": "icons/icon128.png"
   },
   "permissions": [
     "storage",
-    "activeTab"
+    "activeTab",
+    "scripting"
   ],
   "host_permissions": [
     "https://youtube-qa-system.onrender.com/*",
@@ -26,7 +27,8 @@
   "content_scripts": [
     {
       "matches": ["https://www.youtube.com/*"],
-      "js": ["contentScript.js"]
+      "js": ["contentScript.js"],
+      "run_at": "document_idle"
     }
   ]
 }
