@@ -1,8 +1,8 @@
-# main.py - Production YouTube Q&A API
+# main.py - Production YouTube Q&A API (Updated with Root Route)
 import os
 import re
 import logging
-import base64
+import time
 from typing import List, Optional
 from functools import wraps
 
@@ -28,9 +28,10 @@ from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain.schema import Document
 from deep_translator import GoogleTranslator
+from pytube import YouTube
+import wikipedia
 import requests
 import html
-import time
 
 # Load environment variables
 load_dotenv()
@@ -38,7 +39,7 @@ load_dotenv()
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s",
+    format="%(asctime)s |)s",
     handlers=[
         logging.FileHandler('app.log'),
         logging.StreamHandler()
@@ -413,6 +414,28 @@ def handle_general_error(e):
     return jsonify({'error': 'Internal server error'}), 500
 
 # Routes
+@app.route('/')
+def index():
+    """Root endpoint - API information (FIXES 404 ERROR)"""
+    return jsonify({
+        'service': 'YouTube Q&A API',
+        'version': '1.0.0',
+        'status': 'operational',
+        'endpoints': {
+            'health': '/health',
+            'youtube_qa': '/api/v1/youtube-qa',
+            'api_status': '/api/v1/status'
+        },
+        'documentation': 'Send POST requests to /api/v1/youtube-qa with url and question fields',
+        'usage': {
+            'method': 'POST',
+            'endpoint': '/api/v1/youtube-qa',
+            'required_fields': ['url', 'question'],
+            'optional_fields': ['session_id']
+        },
+        'timestamp': time.time()
+    })
+
 @app.route('/health')
 def health():
     """Health check endpoint"""
@@ -485,7 +508,11 @@ def api_status():
         'openai_configured': bool(OPENAI_API_KEY),
         'proxy_configured': bool(proxies),
         'supported_languages': ['en', 'en-US', 'en-IN', 'hi'],
-        'max_question_length': 500
+        'max_question_length': 500,
+        'rate_limits': {
+            'youtube_qa': '5 per minute',
+            'general': '100 per hour, 10 per minute'
+        }
     })
 
 if __name__ == '__main__':
