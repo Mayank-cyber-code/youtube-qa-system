@@ -1,0 +1,21 @@
+# Development dependencies
+-r requirements.txt
+
+# Testing
+pytest==7.4.4
+pytest-cov==4.1.0
+pytest-asyncio==0.23.2
+
+# Security scanning
+pip-audit==2.7.3
+bandit==1.7.5
+safety==3.0.1
+
+# Code quality
+black==23.12.1
+flake8==7.0.0
+mypy==1.8.0
+
+# Development tools
+ipython==8.18.1
+jupyter==1.0.0
