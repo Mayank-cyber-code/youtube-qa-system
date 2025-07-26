@@ -1,0 +1,44 @@
+# YouTube Q&A API Dependencies
+
+# Web Framework
+Flask==3.0.0
+flask-cors==4.0.0
+flask-limiter==3.7.0
+flask-talisman==1.1.0
+Werkzeug==3.0.1
+
+# Environment Management
+python-dotenv==1.0.0
+
+# AI and Language Processing
+langchain==0.1.0
+langchain-openai==0.0.5
+langchain-community==0.0.15
+openai==1.10.0
+
+# Vector Database
+faiss-cpu==1.7.4
+
+# YouTube and Web Scraping
+youtube-transcript-api==0.6.2
+pytube==15.0.0
+requests==2.31.0
+beautifulsoup4==4.12.3
+
+# Translation and Text Processing
+deep-translator==1.11.4
+wikipedia==1.4.0
+
+# Data Processing
+pandas==2.1.4
+numpy==1.26.2
+
+# Logging and Monitoring
+structlog==23.2.0
+
+# Production Server
+gunicorn==21.2.0
+gevent==23.9.1
+
+# Security
+cryptography==41.0.8
