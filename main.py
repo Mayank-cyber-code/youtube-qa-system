@@ -159,7 +159,7 @@ def web_search_links(query: str) -> str:
     import urllib.parse
     q = urllib.parse.quote(query)
     return (
-        f"Couldn't find answer. Try:\n"
+        f"Couldn't find an answer. Try:\n"
         f"- Google: https://www.google.com/search?q={q}\n"
         f"- DuckDuckGo: https://duckduckgo.com/?q={q}"
     )
@@ -171,13 +171,12 @@ def clean_for_wikipedia(q: str) -> str:
     )
     return m.group(1).strip(" .?") if m else q
 
-VAGUE_PATTERNS = ["no idea","not mentioned","insufficient information","sorry","unfortunately"]
+VAGUE_PATTERNS = ["no idea", "not mentioned", "insufficient information", "sorry", "unfortunately"]
 
 def is_summary_question(q: str) -> bool:
     s = q.lower()
-    return any(x in s for x in ["summarize","summary","what is this video about","main topic"])
+    return any(x in s for x in ["summarize", "summary", "what is this video about", "main topic"])
 
-# Q&A Service
 class YouTubeConversationalQA:
     def __init__(self, model="gpt-3.5-turbo"):
         self.emb = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
@@ -192,7 +191,8 @@ class YouTubeConversationalQA:
             if not docs:
                 return None
             splitter = RecursiveCharacterTextSplitter(
-                chunk_size=1000, chunk_overlap=200, separators=["\n\n","\n",". "," ",""]
+                chunk_size=1000, chunk_overlap=200,
+                separators=["\n\n", "\n", ". ", " ", ""]
             )
             splits = splitter.split_documents(docs)
             self.cache[vid] = FAISS.from_documents(splits, self.emb)
@@ -213,7 +213,7 @@ class YouTubeConversationalQA:
 
     def ask(self, url: str, question: str, session_id: str="default") -> str:
         chain = self.build_chain(url, session_id)
-        ans = None
+        answer = None
         if chain:
             try:
                 if is_summary_question(question):
@@ -221,11 +221,11 @@ class YouTubeConversationalQA:
                     res = chain.invoke({"question": tpl})
                 else:
                     res = chain.invoke({"question": question})
-                ans = res.get("answer","").strip()
+                answer = res.get("answer", "").strip()
             except Exception as e:
                 logger.warning(f"QA chain failed: {e}")
-        if ans and not self.is_incomplete(ans):
-            return ans
+        if answer and not self.is_incomplete(answer):
+            return answer
         title = get_video_title(url)
         term = title or question
         wiki = wikipedia_search(term)
@@ -238,7 +238,6 @@ class YouTubeConversationalQA:
 
 qa_service = YouTubeConversationalQA()
 
-# Middleware for timing
 @app.before_request
 def before_request():
     g.start_time = time.time()
@@ -250,7 +249,6 @@ def after_request(response):
                 duration, request.method, request.path, response.status_code)
     return response
 
-# Error handlers
 @app.errorhandler(QuotaExceededError)
 def err_quota(e):
     return jsonify(error="Quota exceeded, try later"), 429
@@ -264,19 +262,18 @@ def err_any(e):
     logger.error("Unexpected error: %s", e)
     return jsonify(error="Internal server error"), 500
 
-# Routes
 @app.route('/', methods=['GET','HEAD'])
 def index():
     return jsonify({
-        "service":"YouTube Q&A API",
-        "version":"1.0.0",
-        "status":"operational",
-        "endpoints":{
-            "health":"/health",
-            "qa":"/api/v1/youtube-qa",
-            "status":"/api/v1/status"
+        "service": "YouTube Q&A API",
+        "version": "1.0.0",
+        "status": "operational",
+        "endpoints": {
+            "health": "/health",
+            "qa": "/api/v1/youtube-qa",
+            "status": "/api/v1/status"
         },
-        "timestamp":time.time()
+        "timestamp": time.time()
     }), 200
 
 @app.route('/health')
@@ -295,8 +292,8 @@ def status():
 @limiter.limit("5 per minute")
 def youtube_qa():
     data = request.get_json() or {}
-    url = data.get("url","").strip()
-    q = data.get("question","").strip()
+    url = data.get("url", "").strip()
+    q = data.get("question", "").strip()
     if not url or not q:
         return jsonify(error="Missing url or question"), 400
     if len(q) > 500:
@@ -305,8 +302,8 @@ def youtube_qa():
         vid = extract_video_id(url)
     except ValueError:
         return jsonify(error="Invalid YouTube URL"), 400
-    ans = qa_service.ask(url, q, data.get("session_id","default"))
+    ans = qa_service.ask(url, q, data.get("session_id", "default"))
     return jsonify(answer=ans, video_id=vid, timestamp=time.time())
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT",5000)), debug=False)
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=False)
