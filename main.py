@@ -1,4 +1,4 @@
-# main.py - Production YouTube Q&A API (Updated with Root Route)
+# main.py - Production YouTube Q&A API (Complete Updated Version)
 import os
 import re
 import logging
@@ -35,11 +35,7 @@ import html
 
 # Load environment variables
 load_dotenv()
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s |)s",
+    format="%(asctime)s | %(levelname)s | %(message)s",
     handlers=[
         logging.FileHandler('app.log'),
         logging.StreamHandler()
@@ -53,7 +49,8 @@ app = Flask(__name__)
 # Security configuration
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
 if not app.config['SECRET_KEY']:
-    raise RuntimeError("SECRET_KEY environment variable not set!")
+    app.config['SECRET_KEY'] = os.urandom(24)
+    logger.warning("SECRET_KEY not set, using random key (not recommended for production)")
 
 # Additional security configurations
 app.config['SESSION_COOKIE_SECURE'] = True
@@ -61,16 +58,18 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 # Security headers with Talisman
-Talisman(app, force_https=False)  # Set to True in production with HTTPS
+Talisman(app, force_https=False)  # Set to True if using HTTPS
 
 # CORS configuration for Chrome extension
 allowed_origins = os.getenv('ALLOWED_ORIGINS', 'chrome-extension://*').split(',')
 CORS(app, origins=allowed_origins + ['http://localhost:*'])
 
-# Rate limiting
+# Rate limiting with Redis storage (fixes production warning)
+REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379')
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,
+    storage_uri=REDIS_URL,
     default_limits=["100 per hour", "10 per minute"],
     headers_enabled=True
 )
@@ -414,9 +413,9 @@ def handle_general_error(e):
     return jsonify({'error': 'Internal server error'}), 500
 
 # Routes
-@app.route('/')
+@app.route('/', methods=['GET', 'HEAD'])
 def index():
-    """Root endpoint - API information (FIXES 404 ERROR)"""
+    """Root endpoint - API information (supports GET and HEAD for Render health checks)"""
     return jsonify({
         'service': 'YouTube Q&A API',
         'version': '1.0.0',
@@ -434,7 +433,7 @@ def index():
             'optional_fields': ['session_id']
         },
         'timestamp': time.time()
-    })
+    }), 200
 
 @app.route('/health')
 def health():
@@ -507,6 +506,7 @@ def api_status():
         'service': 'YouTube Q&A API',
         'openai_configured': bool(OPENAI_API_KEY),
         'proxy_configured': bool(proxies),
+        'redis_configured': bool(REDIS_URL),
         'supported_languages': ['en', 'en-US', 'en-IN', 'hi'],
         'max_question_length': 500,
         'rate_limits': {
