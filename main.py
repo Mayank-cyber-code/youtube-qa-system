@@ -1,4 +1,4 @@
-# main.py – Production YouTube Q&A API (Complete Updated Version)
+# main.py – Production YouTube Q&A API (Updated with fixed timing middleware and optional Redis)
 
 import os
 import re
@@ -55,23 +55,36 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY') or os.urandom(24)
 app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-Talisman(app, force_https=False)  # Set force_https=True in production with HTTPS
+Talisman(app, force_https=False)  # Change to True if serving over HTTPS
 
 # CORS configuration for Chrome extension
 allowed_origins = os.getenv('ALLOWED_ORIGINS', 'chrome-extension://*').split(',')
 CORS(app, origins=allowed_origins + ['http://localhost:*'])
 
-# Rate limiting with Redis storage
-REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379')
-limiter = Limiter(
-    app=app,
-    key_func=get_remote_address,
-    storage_uri=REDIS_URL,
-    default_limits=["100 per hour", "10 per minute"],
-    headers_enabled=True
-)
+# Redis URL environment variable
+REDIS_URL = os.getenv('REDIS_URL', '')
 
-# OpenAI API key
+# Configure rate limiter
+# Use Redis if configured, else fallback to default (in-memory) for dev/testing
+if REDIS_URL:
+    limiter = Limiter(
+        app=app,
+        key_func=get_remote_address,
+        storage_uri=REDIS_URL,
+        default_limits=["100 per hour", "10 per minute"],
+        headers_enabled=True
+    )
+    logger.info(f"Rate limiter using Redis at: {REDIS_URL}")
+else:
+    limiter = Limiter(
+        app=app,
+        key_func=get_remote_address,
+        default_limits=["100 per hour", "10 per minute"],
+        headers_enabled=True
+    )
+    logger.warning("Redis not configured. Using in-memory store for rate limiting (not recommended for production).")
+
+# OpenAI API key configuration
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
     raise RuntimeError("OpenAI API key not set! Please set OPENAI_API_KEY environment variable.")
@@ -105,8 +118,8 @@ def extract_video_id(url: str) -> str:
 
 def translate_to_english(text: str) -> str:
     try:
-        det = GoogleTranslator(source="auto", target="en").detect(text[:160])
-        if det and det.lower() != "en":
+        detected = GoogleTranslator(source="auto", target="en").detect(text[:160])
+        if detected and detected.lower() != "en":
             return GoogleTranslator(source="auto", target="en").translate(text)
     except Exception as e:
         logger.warning(f"Translation failed: {e}")
@@ -211,7 +224,7 @@ class YouTubeConversationalQA:
         lo = txt.lower()
         return any(p in lo for p in VAGUE_PATTERNS)
 
-    def ask(self, url: str, question: str, session_id: str="default") -> str:
+    def ask(self, url: str, question: str, session_id: str = "default") -> str:
         chain = self.build_chain(url, session_id)
         ans = None
         if chain:
@@ -244,11 +257,14 @@ def before_request():
 
 @app.after_request
 def after_request(response):
-    duration = time.time() - g.start_time
-    logger.info(
-        "Completed in %.3fs %s %s %d",
-        duration, request.method, request.path, response.status_code
-    )
+    # Safely get start_time to avoid AttributeError
+    start = getattr(g, "start_time", None)
+    if start:
+        duration = time.time() - start
+    else:
+        duration = 0
+    logger.info("Completed in %.3fs %s %s %d",
+                duration, request.method, request.path, response.status_code)
     return response
 
 @app.errorhandler(QuotaExceededError)
@@ -264,7 +280,7 @@ def err_any(e):
     logger.error("Unexpected error: %s", e)
     return jsonify(error="Internal server error"), 500
 
-@app.route('/', methods=['GET','HEAD'])
+@app.route('/', methods=['GET', 'HEAD'])
 def index():
     return jsonify({
         "service": "YouTube Q&A API",
