@@ -55,7 +55,7 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY') or os.urandom(24)
 app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-Talisman(app, force_https=False)  # Enable force_https=True if serving over HTTPS
+Talisman(app, force_https=False)  # Set force_https=True if serving over HTTPS
 
 # CORS configuration for Chrome extension
 allowed_origins = os.getenv('ALLOWED_ORIGINS', 'chrome-extension://*').split(',')
@@ -76,7 +76,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
     raise RuntimeError("OpenAI API key not set! Please set OPENAI_API_KEY environment variable.")
 
-# Proxy configuration
+# Optional proxy configuration
 PROXY_HOST = os.getenv("PROXY_HOST", "")
 PROXY_PORT = os.getenv("PROXY_PORT", "9050")
 proxies = None
@@ -114,8 +114,11 @@ def translate_to_english(text: str) -> str:
 
 def get_transcript_docs(video_id: str) -> Optional[List[Document]]:
     try:
-        entries = YouTubeTranscriptApi.get_transcript(video_id,
-            languages=["en","en-US","en-IN","hi"], proxies=proxies)
+        entries = YouTubeTranscriptApi.get_transcript(
+            video_id,
+            languages=["en", "en-US", "en-IN", "hi"],
+            proxies=proxies
+        )
         text = " ".join(d["text"] for d in entries)
         return [Document(page_content=translate_to_english(text))]
     except TranscriptsDisabled:
@@ -155,29 +158,31 @@ def wikipedia_search(query: str) -> Optional[str]:
 def web_search_links(query: str) -> str:
     import urllib.parse
     q = urllib.parse.quote(query)
-    return (f"Couldn't find answer. Try:\n"
-            f"- Google: https://www.google.com/search?q={q}\n"
-            f"- DuckDuckGo: https://duckduckgo.com/?q={q}")
+    return (
+        f"Couldn't find answer. Try:\n"
+        f"- Google: https://www.google.com/search?q={q}\n"
+        f"- DuckDuckGo: https://duckduckgo.com/?q={q}"
+    )
 
 def clean_for_wikipedia(q: str) -> str:
-    m = re.match(r"(who|what|when|where|why|how)\s+(?:is|are|was|were|do|does|did|has|have|can|could|should|would)?\s*(.*)",
-                 q, flags=re.IGNORECASE)
+    m = re.match(
+        r"(who|what|when|where|why|how)\s+(?:is|are|was|were|do|does|did|has|have|can|could|should|would)?\s*(.*)",
+        q, flags=re.IGNORECASE
+    )
     return m.group(1).strip(" .?") if m else q
 
-VAGUE_PATTERNS = ["no idea","not mentioned","insufficient information","sorry","unfortunately"]
+VAGUE_PATTERNS = ["no idea", "not mentioned", "insufficient information", "sorry", "unfortunately"]
 
 def is_summary_question(q: str) -> bool:
     s = q.lower()
-    return any(x in s for x in ["summarize","summary","what is this video about","main topic"])
+    return any(x in s for x in ["summarize", "summary", "what is this video about", "main topic"])
 
-# Q&A Service
 class YouTubeConversationalQA:
     def __init__(self, model="gpt-3.5-turbo"):
         self.emb = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
         self.cache = {}
-        self.llm = ChatOpenAI(openai_api_key=OPENAI_API_KEY,
-                              model=model, temperature=0.4, max_tokens=512)
-        self.mem = {}
+        self.llm = ChatOpenAI(openai_api_key=OPENAI_API_KEY, model=model, temperature=0.4, max_tokens=512)
+        self.memories = {}
 
     def build_chain(self, url: str, session_id: str):
         vid = extract_video_id(url)
@@ -186,23 +191,21 @@ class YouTubeConversationalQA:
             if not docs:
                 return None
             splitter = RecursiveCharacterTextSplitter(
-                chunk_size=1000, chunk_overlap=200,
-                separators=["\n\n","\n",". "," ",""]
+                chunk_size=1000, chunk_overlap=200, separators=["\n\n", "\n", ". ", " ", ""]
             )
             splits = splitter.split_documents(docs)
             self.cache[vid] = FAISS.from_documents(splits, self.emb)
         retr = self.cache[vid].as_retriever()
-        if session_id not in self.mem:
-            self.mem[session_id] = ConversationBufferMemory(
+        if session_id not in self.memories:
+            self.memories[session_id] = ConversationBufferMemory(
                 memory_key="chat_history", return_messages=True, output_key="answer"
             )
         return ConversationalRetrievalChain.from_llm(
-            llm=self.llm, retriever=retr, memory=self.mem[session_id],
-            return_source_documents=False
+            llm=self.llm, retriever=retr, memory=self.memories[session_id], return_source_documents=False
         )
 
     def is_incomplete(self, txt: str) -> bool:
-        if not txt or len(txt.strip())<8:
+        if not txt or len(txt.strip()) < 8:
             return True
         lo = txt.lower()
         return any(p in lo for p in VAGUE_PATTERNS)
@@ -214,11 +217,11 @@ class YouTubeConversationalQA:
         if chain:
             try:
                 if is_summary_question(question):
-                    tpl = ("Given the transcript, summarize the main topic only. Transcript: {context}")
+                    tpl = "Given the transcript, summarize the main topic only. Transcript: {context}"
                     res = chain.invoke({"question": tpl})
                 else:
                     res = chain.invoke({"question": question})
-                answer = res.get("answer","").strip()
+                answer = res.get("answer", "").strip()
             except Exception as e:
                 logger.warning(f"QA chain failed: {e}")
                 fallback = True
@@ -240,62 +243,70 @@ class YouTubeConversationalQA:
 
 qa_service = YouTubeConversationalQA()
 
-# Middleware for timing
 @app.before_request
 def before_req():
     g.start = time.time()
+
 @app.after_request
 def after_req(resp):
-    logger.info("Completed in %.3fs %s %s %d",
-                time.time()-g.start, request.method, request.path, resp.status_code)
+    logger.info("Completed in %.3fs %s %s %d", time.time() - g.start, request.method, request.path, resp.status_code)
     return resp
 
-# Error handlers
 @app.errorhandler(QuotaExceededError)
 def err_quota(e):
-    return jsonify(error="Quota exceeded, try later"),429
+    return jsonify(error="Quota exceeded, try later"), 429
+
 @app.errorhandler(ValueError)
 def err_val(e):
-    return jsonify(error=str(e)),400
+    return jsonify(error=str(e)), 400
+
 @app.errorhandler(Exception)
 def err_any(e):
     logger.error("Unexpected error: %s", e)
-    return jsonify(error="Internal server error"),500
+    return jsonify(error="Internal server error"), 500
 
-# Routes
-@app.route('/', methods=['GET','HEAD'])
+@app.route('/', methods=['GET', 'HEAD'])
 def index():
     return jsonify({
-        "service":"YouTube Q&A API","version":"1.0.0","status":"operational",
-        "endpoints":{"health":"/health","qa":"/api/v1/youtube-qa","status":"/api/v1/status"},
-        "timestamp":time.time()
-    }),200
+        "service": "YouTube Q&A API",
+        "version": "1.0.0",
+        "status": "operational",
+        "endpoints": {
+            "health": "/health",
+            "qa": "/api/v1/youtube-qa",
+            "status": "/api/v1/status"
+        },
+        "timestamp": time.time()
+    }), 200
 
 @app.route('/health')
 def health():
-    return jsonify(status="healthy",timestamp=time.time())
+    return jsonify(status="healthy", timestamp=time.time())
 
 @app.route('/api/v1/status')
 def status():
-    return jsonify(openai_configured=bool(OPENAI_API_KEY),
-                   proxy=bool(proxies),redis=bool(REDIS_URL))
+    return jsonify(
+        openai_configured=bool(OPENAI_API_KEY),
+        proxy=bool(proxies),
+        redis=bool(REDIS_URL)
+    )
 
 @app.route('/api/v1/youtube-qa', methods=['POST'])
-@limiter.limit("5/minute")
+@limiter.limit("5 per minute")
 def youtube_qa():
     data = request.get_json() or {}
-    url = data.get("url","").strip()
-    q = data.get("question","").strip()
+    url = data.get("url", "").strip()
+    q = data.get("question", "").strip()
     if not url or not q:
-        return jsonify(error="Missing url or question"),400
-    if len(q)>500:
-        return jsonify(error="Question too long"),400
+        return jsonify(error="Missing url or question"), 400
+    if len(q) > 500:
+        return jsonify(error="Question too long (max 500 chars)"), 400
     try:
         vid = extract_video_id(url)
     except ValueError:
-        return jsonify(error="Invalid YouTube URL"),400
-    ans = qa_service.ask(url,q,data.get("session_id","default"))
-    return jsonify(answer=ans,video_id=vid,timestamp=time.time())
+        return jsonify(error="Invalid YouTube URL"), 400
+    ans = qa_service.ask(url, q, data.get("session_id", "default"))
+    return jsonify(answer=ans, video_id=vid, timestamp=time.time())
 
-if __name__=="__main__":
-    app.run(host="0.0.0.0",port=int(os.getenv("PORT",5000)),debug=False)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=False)
