@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Q&A Assistant</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <img src="icons/icon32.png" alt="Logo" class="logo">
+            <h1>YouTube Q&A</h1>
+        </div>
+        
+        <!-- Current Video Info -->
+        <div class="video-info" id="videoInfo" style="display: none;">
+            <div class="video-title" id="videoTitle">Loading...</div>
+            <div class="video-url" id="videoUrl"></div>
+        </div>
+        
+        <!-- Question Input -->
+        <div class="question-section">
+            <label for="questionInput">Ask a question about this video:</label>
+            <textarea 
+                id="questionInput" 
+                placeholder="What is this video about?"
+                maxlength="500"
+                rows="3"
+            ></textarea>
+            <div class="char-counter">
+                <span id="charCount">0</span>/500
+            </div>
+        </div>
+        
+        <!-- Action Buttons -->
+        <div class="button-section">
+            <button id="askButton" class="primary-btn" disabled>
+                <span class="btn-text">Ask Question</span>
+                <div class="loading-spinner" style="display: none;"></div>
+            </button>
+            <button id="clearButton" class="secondary-btn">Clear</button>
+        </div>
+        
+        <!-- Answer Section -->
+        <div class="answer-section" id="answerSection" style="display: none;">
+            <div class="answer-header">
+                <h3>Answer</h3>
+                <button id="copyAnswer" class="copy-btn" title="Copy answer">📋</button>
+            </div>
+            <div class="answer-content" id="answerContent"></div>
+        </div>
+        
+        <!-- Error Section -->
+        <div class="error-section" id="errorSection" style="display: none;">
+            <div class="error-content" id="errorContent"></div>
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            <div class="api-status" id="apiStatus">
+                <span class="status-indicator" id="statusIndicator"></span>
+                <span id="statusText">Checking connection...</span>
+            </div>
+        </div>
+    </div>
+    
+    <script src="popup.js"></script>
+</body>
+</html>
