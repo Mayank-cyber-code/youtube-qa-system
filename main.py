@@ -6,7 +6,7 @@ import logging
 import time
 from typing import List, Optional
 
-from flask import, request, jsonify, g
+from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -55,7 +55,7 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY') or os.urandom(24)
 app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-Talisman(app, force_https=False)  # Set force_https=True if serving over HTTPS
+Talisman(app, force_https=False)  # Set force_https=True in production with HTTPS
 
 # CORS configuration for Chrome extension
 allowed_origins = os.getenv('ALLOWED_ORIGINS', 'chrome-extension://*').split(',')
@@ -159,7 +159,7 @@ def web_search_links(query: str) -> str:
     import urllib.parse
     q = urllib.parse.quote(query)
     return (
-        f"Couldn't find answer. Try:\n"
+        f"Couldn't find an answer. Try:\n"
         f"- Google: https://www.google.com/search?q={q}\n"
         f"- DuckDuckGo: https://duckduckgo.com/?q={q}"
     )
@@ -245,8 +245,10 @@ def before_request():
 @app.after_request
 def after_request(response):
     duration = time.time() - g.start_time
-    logger.info("Completed in %.3fs %s %s %d",
-                duration, request.method, request.path, response.status_code)
+    logger.info(
+        "Completed in %.3fs %s %s %d",
+        duration, request.method, request.path, response.status_code
+    )
     return response
 
 @app.errorhandler(QuotaExceededError)
@@ -265,16 +267,16 @@ def err_any(e):
 @app.route('/', methods=['GET','HEAD'])
 def index():
     return jsonify({
-        "service":"YouTube Q&A API",
-        "version":"1.0.0",
-        "status":"operational",
-        "endpoints":{
-            "health":"/health",
-            "qa":"/api/v1/youtube-qa",
-            "status":"/api/v1/status"
+        "service": "YouTube Q&A API",
+        "version": "1.0.0",
+        "status": "operational",
+        "endpoints": {
+            "health": "/health",
+            "qa": "/api/v1/youtube-qa",
+            "status": "/api/v1/status"
         },
-        "timestamp":time.time()
-    }),200
+        "timestamp": time.time()
+    }), 200
 
 @app.route('/health')
 def health():
@@ -292,18 +294,18 @@ def status():
 @limiter.limit("5 per minute")
 def youtube_qa():
     data = request.get_json() or {}
-    url = data.get("url","").strip()
-    q = data.get("question","").strip()
+    url = data.get("url", "").strip()
+    q = data.get("question", "").strip()
     if not url or not q:
-        return jsonify(error="Missing url or question"),400
-    if len(q)>500:
-        return jsonify(error="Question too long (max 500 chars)"),400
+        return jsonify(error="Missing url or question"), 400
+    if len(q) > 500:
+        return jsonify(error="Question too long (max 500 chars)"), 400
     try:
         vid = extract_video_id(url)
     except ValueError:
-        return jsonify(error="Invalid YouTube URL"),400
-    ans = qa_service.ask(url,q,data.get("session_id","default"))
+        return jsonify(error="Invalid YouTube URL"), 400
+    ans = qa_service.ask(url, q, data.get("session_id", "default"))
     return jsonify(answer=ans, video_id=vid, timestamp=time.time())
 
-if __name__=="__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT",5000)), debug=False)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=False)
