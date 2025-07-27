@@ -7,15 +7,16 @@
     body { font-family: sans-serif; margin: 2rem; }
     input, textarea, button { font-size:1rem; }
     label { display:block; margin-top:1.2em; }
-    #answer { background:#f0f0f0; padding:1em; margin-top:1em; border-radius:5px; }
-    #error { color: #c00; margin-top:1em; }
+    #answer { background:#f9f9f9; padding:1em; margin-top:1em; border-radius:5px; }
+    #error { color: #b00; margin-top:1em; }
+    #loading { margin-top:1em; font-size: 1.1em; color: #555;}
   </style>
 </head>
 <body>
   <h2>YouTube Q&A API Tester</h2>
   <label>
     YouTube Video URL:
-    <input id="url" type="text" size="60" placeholder="https://www.youtube.com/watch?v=..." required/>
+    <input id="url" type="text" size="60" placeholder="https://www.youtube.com/watch?v=..." required />
   </label>
   <label>
     Question:
@@ -24,6 +25,7 @@
   <br>
   <button id="askBtn">Ask!</button>
   
+  <div id="loading" style="display:none;">Processing, please wait...</div>
   <div id="answer"></div>
   <div id="error"></div>
 
@@ -34,12 +36,14 @@
       const question = document.getElementById('question').value.trim();
       document.getElementById('error').textContent = '';
       document.getElementById('answer').textContent = '';
+      document.getElementById('loading').style.display = 'none';
       if (!url || !question) {
         document.getElementById('error').textContent = 'Please provide both the YouTube URL and a question.';
         return;
       }
       document.getElementById('askBtn').disabled = true;
       document.getElementById('askBtn').textContent = 'Loading...';
+      document.getElementById('loading').style.display = 'block';
       try {
         const resp = await fetch(apiUrl, {
           method: 'POST',
@@ -57,6 +61,7 @@
       }
       document.getElementById('askBtn').disabled = false;
       document.getElementById('askBtn').textContent = 'Ask!';
+      document.getElementById('loading').style.display = 'none';
     };
   </script>
 </body>
