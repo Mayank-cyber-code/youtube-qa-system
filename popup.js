@@ -2,7 +2,9 @@
 
 class YouTubeQAPopup {
     constructor() {
-        this.API_BASE_URL = 'https://youtube-qa-systemrender.com';
+        // Corrected API base URL (added missing dot)
+        this.API_BASE_URL = 'https://youtube-qa-system.onrender.com';
+
         this.currentVideoUrl = '';
         this.currentVideoTitle = '';
         this.isProcessing = false;
@@ -39,6 +41,7 @@ class YouTubeQAPopup {
             this.toggleAskButton();
         });
 
+        // Allow Ctrl+Enter to submit question faster
         this.elements.questionInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && e.ctrlKey) {
                 this.handleAskQuestion();
@@ -85,30 +88,36 @@ class YouTubeQAPopup {
     updateApiStatus(status, text) {
         this.elements.statusIndicator.className = `status-indicator ${status}`;
         this.elements.statusText.textContent = text;
-        this.elements.askButton.disabled = (status !== 'online');
+        this.elements.askButton.disabled = (status !== 'online' || this.isProcessing);
     }
 
     async getCurrentVideoInfo() {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (!tab.url.includes('youtube.com/watch')) {
-            this.showError('Navigate to a YouTube video');
+        try {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (!tab || !tab.url.includes('youtube.com/watch')) {
+                this.showError('Navigate to a YouTube video');
+                this.disableInterface();
+                return;
+            }
+            const urlParams = new URLSearchParams(new URL(tab.url).search);
+            const videoId = urlParams.get('v');
+            if (!videoId) {
+                this.showError('Could not detect YouTube video');
+                this.disableInterface();
+                return;
+            }
+            this.currentVideoUrl = tab.url;
+            this.currentVideoTitle = tab.title.replace(' - YouTube', '');
+            this.elements.videoTitle.textContent = this.currentVideoTitle;
+            this.elements.videoUrl.textContent = this.currentVideoUrl;
+            this.elements.videoInfo.style.display = 'block';
+            this.elements.questionInput.disabled = false;
+            this.toggleAskButton();
+        } catch (error) {
+            console.error('Error fetching current tab:', error);
+            this.showError('Unable to fetch video info');
             this.disableInterface();
-            return;
         }
-        const urlParams = new URLSearchParams(new URL(tab.url).search);
-        const videoId = urlParams.get('v');
-        if (!videoId) {
-            this.showError('Could not detect YouTube video');
-            this.disableInterface();
-            return;
-        }
-        this.currentVideoUrl = tab.url;
-        this.currentVideoTitle = tab.title.replace(' - YouTube', '');
-        this.elements.videoTitle.textContent = this.currentVideoTitle;
-        this.elements.videoUrl.textContent = this.currentVideoUrl;
-        this.elements.videoInfo.style.display = 'block';
-        this.elements.questionInput.disabled = false;
-        this.toggleAskButton();
     }
 
     disableInterface() {
@@ -119,6 +128,7 @@ class YouTubeQAPopup {
     updateCharCount() {
         const count = this.elements.questionInput.value.length;
         this.elements.charCount.textContent = count;
+        // Colors for char count thresholds: >450 warning, >400 less warning
         this.elements.charCount.style.color = count > 450 ? 'var(--error-color)' :
                                              count > 400 ? 'var(--warning-color)' : '#666';
         this.toggleAskButton();
@@ -166,9 +176,10 @@ class YouTubeQAPopup {
     }
 
     setLoadingState(loading) {
-        this.elements.btnText.style.display = loading ? 'none' : 'block';
-        this.elements.loadingSpinner.style.display = loading ? 'block' : 'none';
-        this.elements.questionInput.disabled = loading;
+        if (this.elements.btnText) this.elements.btnText.style.display = loading ? 'none' : 'block';
+        if (this.elements.loadingSpinner) this.elements.loadingSpinner.style.display = loading ? 'block' : 'none';
+        if (this.elements.questionInput) this.elements.questionInput.disabled = loading;
+        if (this.elements.askButton) this.elements.askButton.disabled = loading;
     }
 
     showAnswer(answer) {
@@ -184,6 +195,7 @@ class YouTubeQAPopup {
     showError(message) {
         this.elements.errorContent.textContent = message;
         this.elements.errorSection.style.display = 'block';
+        // Hide error automatically after 5 seconds
         setTimeout(() => this.hideError(), 5000);
     }
 
@@ -211,11 +223,17 @@ class YouTubeQAPopup {
     }
 
     async getSessionId() {
-        const result = await chrome.storage.local.get(['sessionId']);
-        if (result.sessionId) return result.sessionId;
-        const sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-        await chrome.storage.local.set({ sessionId });
-        return sessionId;
+        return new Promise((resolve) => {
+            chrome.storage.local.get(['sessionId'], async (result) => {
+                if (result.sessionId) {
+                    resolve(result.sessionId);
+                } else {
+                    const sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                    await chrome.storage.local.set({ sessionId });
+                    resolve(sessionId);
+                }
+            });
+        });
     }
 
     async saveQuestion(question) {
@@ -228,16 +246,20 @@ class YouTubeQAPopup {
     }
 
     async loadPreviousQuestion() {
-        const result = await chrome.storage.local.get(['lastQuestion', 'lastVideoUrl', 'lastQuestionTime']);
-        if (
-            result.lastQuestion &&
-            result.lastVideoUrl === this.currentVideoUrl &&
-            new Date() - new Date(result.lastQuestionTime) < 60*60*1000
-        ) {
-            this.elements.questionInput.value = result.lastQuestion;
-            this.updateCharCount();
-            this.toggleAskButton();
-        }
+        return new Promise((resolve) => {
+            chrome.storage.local.get(['lastQuestion', 'lastVideoUrl', 'lastQuestionTime'], (result) => {
+                if (
+                    result.lastQuestion &&
+                    result.lastVideoUrl === this.currentVideoUrl &&
+                    new Date() - new Date(result.lastQuestionTime) < 60*60*1000
+                ) {
+                    this.elements.questionInput.value = result.lastQuestion;
+                    this.updateCharCount();
+                    this.toggleAskButton();
+                }
+                resolve();
+            });
+        });
     }
 }
 
