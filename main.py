@@ -126,25 +126,28 @@ def translate_to_english(text: str) -> str:
 
 def get_transcript_docs(video_id: str) -> Optional[List[Document]]:
     try:
+        logger.info(f"Fetching transcript for video ID: {video_id}")
         entries = YouTubeTranscriptApi.get_transcript(
             video_id,
             languages=["en", "en-US", "en-IN", "hi"],
-            proxies=proxies
+            proxies=proxies if proxies else None
         )
-        text = " ".join(d["text"] for d in entries)
-        logger.info(f"Transcript fetched for video {video_id}, length: {len(text)} chars")
-        return [Document(page_content=translate_to_english(text))]
+        transcript_text = " ".join(segment["text"] for segment in entries)
+        logger.info(f"Transcript fetched, length: {len(transcript_text)} chars")
+        translated_text = translate_to_english(transcript_text)
+        return [Document(page_content=translated_text)]
     except TranscriptsDisabled:
         logger.warning(f"Transcripts are disabled for video {video_id}")
         return None
     except NoTranscriptFound:
         logger.warning(f"No transcript found for video {video_id}")
         return None
-    except TooManyRequests:
-        raise QuotaExceededError("YouTube API rate limit exceeded")
     except VideoUnavailable:
         logger.warning(f"Video unavailable: {video_id}")
         return None
+    except TooManyRequests:
+        logger.error(f"YouTube API rate limit exceeded while fetching transcript for video {video_id}")
+        raise QuotaExceededError("YouTube API rate limit exceeded")
     except Exception as e:
         logger.error(f"Transcript fetch error for video {video_id}: {e}")
         return None
