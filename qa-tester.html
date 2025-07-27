@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>YouTube Q&A API Tester</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; }
+    input, textarea, button { font-size:1rem; }
+    label { display:block; margin-top:1.2em; }
+    #answer { background:#f0f0f0; padding:1em; margin-top:1em; border-radius:5px; }
+    #error { color: #c00; margin-top:1em; }
+  </style>
+</head>
+<body>
+  <h2>YouTube Q&A API Tester</h2>
+  <label>
+    YouTube Video URL:
+    <input id="url" type="text" size="60" placeholder="https://www.youtube.com/watch?v=..." required/>
+  </label>
+  <label>
+    Question:
+    <textarea id="question" rows="3" cols="60" placeholder="Type your question here..." required></textarea>
+  </label>
+  <br>
+  <button id="askBtn">Ask!</button>
+  
+  <div id="answer"></div>
+  <div id="error"></div>
+
+  <script>
+    const apiUrl = 'https://youtube-qa-system.onrender.com/api/v1/youtube-qa';
+    document.getElementById('askBtn').onclick = async () => {
+      const url = document.getElementById('url').value.trim();
+      const question = document.getElementById('question').value.trim();
+      document.getElementById('error').textContent = '';
+      document.getElementById('answer').textContent = '';
+      if (!url || !question) {
+        document.getElementById('error').textContent = 'Please provide both the YouTube URL and a question.';
+        return;
+      }
+      document.getElementById('askBtn').disabled = true;
+      document.getElementById('askBtn').textContent = 'Loading...';
+      try {
+        const resp = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, question })
+        });
+        const data = await resp.json();
+        if (resp.ok && data.answer) {
+          document.getElementById('answer').textContent = data.answer;
+        } else {
+          document.getElementById('error').textContent = data.error || 'No answer returned';
+        }
+      } catch (e) {
+        document.getElementById('error').textContent = 'Error: ' + e;
+      }
+      document.getElementById('askBtn').disabled = false;
+      document.getElementById('askBtn').textContent = 'Ask!';
+    };
+  </script>
+</body>
+</html>
