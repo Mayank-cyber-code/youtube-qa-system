@@ -57,15 +57,14 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 Talisman(app, force_https=False)  # Change to True if serving over HTTPS
 
-# CORS configuration for Chrome extension
+# CORS configuration for Chrome extension and local testing
 allowed_origins = os.getenv('ALLOWED_ORIGINS', 'chrome-extension://*').split(',')
 CORS(app, origins=allowed_origins + ['http://localhost:*'])
 
 # Redis URL environment variable
 REDIS_URL = os.getenv('REDIS_URL', '')
 
-# Configure rate limiter
-# Use Redis if configured, else fallback to default (in-memory) for dev/testing
+# Configure rate limiter: use Redis if configured, fallback to in-memory for dev/testing
 if REDIS_URL:
     limiter = Limiter(
         app=app,
@@ -133,17 +132,21 @@ def get_transcript_docs(video_id: str) -> Optional[List[Document]]:
             proxies=proxies
         )
         text = " ".join(d["text"] for d in entries)
+        logger.info(f"Transcript fetched for video {video_id}, length: {len(text)} chars")
         return [Document(page_content=translate_to_english(text))]
     except TranscriptsDisabled:
+        logger.warning(f"Transcripts are disabled for video {video_id}")
         return None
     except NoTranscriptFound:
+        logger.warning(f"No transcript found for video {video_id}")
         return None
     except TooManyRequests:
         raise QuotaExceededError("YouTube API rate limit exceeded")
     except VideoUnavailable:
+        logger.warning(f"Video unavailable: {video_id}")
         return None
     except Exception as e:
-        logger.error(f"Transcript fetch error: {e}")
+        logger.error(f"Transcript fetch error for video {video_id}: {e}")
         return None
 
 def get_video_title(url: str) -> Optional[str]:
@@ -158,7 +161,7 @@ def get_video_title(url: str) -> Optional[str]:
             m = re.search(r"<title>(.*?) - YouTube</title>", r.text)
             if m:
                 return html.unescape(m.group(1)).strip()
-        except:
+        except Exception:
             pass
     return None
 
@@ -202,6 +205,7 @@ class YouTubeConversationalQA:
         if vid not in self.cache:
             docs = get_transcript_docs(vid)
             if not docs:
+                logger.info(f"No docs found for video {vid}, cannot build chain")
                 return None
             splitter = RecursiveCharacterTextSplitter(
                 chunk_size=1000, chunk_overlap=200,
@@ -209,11 +213,13 @@ class YouTubeConversationalQA:
             )
             splits = splitter.split_documents(docs)
             self.cache[vid] = FAISS.from_documents(splits, self.emb)
+            logger.info(f"Built FAISS index for video {vid}, {len(splits)} chunks")
         retr = self.cache[vid].as_retriever()
         if session_id not in self.memories:
             self.memories[session_id] = ConversationBufferMemory(
                 memory_key="chat_history", return_messages=True, output_key="answer"
             )
+            logger.info(f"Created new conversation memory for session '{session_id}'")
         return ConversationalRetrievalChain.from_llm(
             llm=self.llm, retriever=retr, memory=self.memories[session_id], return_source_documents=False
         )
@@ -239,6 +245,7 @@ class YouTubeConversationalQA:
                 logger.warning(f"QA chain failed: {e}")
         if ans and not self.is_incomplete(ans):
             return ans
+        # Fallbacks
         title = get_video_title(url)
         term = title or question
         wiki = wikipedia_search(term)
@@ -257,7 +264,6 @@ def before_request():
 
 @app.after_request
 def after_request(response):
-    # Safely get start_time to avoid AttributeError
     start = getattr(g, "start_time", None)
     if start:
         duration = time.time() - start
@@ -322,6 +328,7 @@ def youtube_qa():
         return jsonify(error="Invalid YouTube URL"), 400
     ans = qa_service.ask(url, q, data.get("session_id", "default"))
     return jsonify(answer=ans, video_id=vid, timestamp=time.time())
+
 @app.route('/favicon.ico')
 def favicon():
     return '', 204
